@@ -23,12 +23,38 @@ No recondicionamento de dispositivos, cada cartão precisava ser formatado, rece
 - **Gravação que não chegou ao flash.** O arquivo é relido e comparado com a origem antes da ejeção, porque depois de ejetar não dá mais para conferir.
 - **Ejeção que falha.** Basta o Explorer ter um handle aberto para o `FSCTL_LOCK_VOLUME` falhar. O script tenta o IOCTL (LOCK, DISMOUNT, liberar trava, EJECT) algumas vezes e, se não der, pede a ejeção ao Shell do Windows, que negocia com o Explorer.
 
+## Interface gráfica
+
+O `sd_gui.py` roda a mesma automação numa janela, sem precisar de terminal:
+
+- Botão **Iniciar/Parar monitor** e indicador de status: cinza (parado), verde (aguardando cartão) e laranja (processando, não remova).
+- Log ao vivo com cores: erro em vermelho, aviso em laranja e sucesso em verde.
+- Contador de cartões gravados na sessão.
+- Opções de ejetar ao terminar e de abrir o Explorer para conferir, que valem na hora.
+- Aviso de que o arquivo de configuração não foi encontrado antes de qualquer formatação.
+- Pede elevação (UAC) sozinha ao abrir e avisa se você tentar fechar no meio de uma gravação.
+
+O monitor roda numa thread separada (com `pythoncom.CoInitialize` para o COM do Windows) e conversa com a janela por uma fila. Assim a interface não trava durante a formatação.
+
 ## Como usar
 
-Requisitos: Windows, Python 3.9+ e terminal aberto **como administrador**.
+Requisitos: Windows e Python 3.9+.
 
 ```bash
 pip install -r requirements.txt
+```
+
+**Com interface gráfica (recomendado):**
+
+```bash
+pythonw sd_gui.py
+```
+
+Dá para criar um atalho na Área de Trabalho apontando para esse comando. A janela pede permissão de administrador sozinha.
+
+**Pelo terminal** (aberto como administrador):
+
+```bash
 python auto_format_sd.py
 ```
 
@@ -49,4 +75,4 @@ Cartões que já estavam inseridos quando o script começou não são formatados
 
 ## Tecnologias
 
-Python, pywin32 (Win32 API, IOCTLs de armazenamento, COM do Shell), PowerShell e ctypes.
+Python, Tkinter, threading, pywin32 (Win32 API, IOCTLs de armazenamento, COM do Shell), PowerShell e ctypes.
