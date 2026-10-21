@@ -25,6 +25,8 @@ No recondicionamento de dispositivos, cada cartão precisava ser formatado, rece
 
 ## Interface gráfica
 
+![Janela do Monitor SD gravando um cartão](docs/monitor-sd.png)
+
 O `sd_gui.py` roda a mesma automação numa janela, sem precisar de terminal:
 
 - Botão **Iniciar/Parar monitor** e indicador de status: cinza (parado), verde (aguardando cartão) e laranja (processando, não remova).
