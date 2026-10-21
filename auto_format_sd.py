@@ -71,6 +71,11 @@ SEGUNDOS_EXPLORER = 6
 # ===================================================================
 
 
+# Funcoes chamadas com cada linha de log. A interface grafica (sd_gui.py)
+# se registra aqui para mostrar o log na janela.
+OUVINTES_LOG = []
+
+
 def log(mensagem: str) -> None:
     linha = f"{datetime.now():%Y-%m-%d %H:%M:%S} - {mensagem}"
     print(linha, flush=True)
@@ -78,6 +83,8 @@ def log(mensagem: str) -> None:
     os.makedirs(pasta, exist_ok=True)
     with open(LOG_PATH, "a", encoding="utf-8") as f:
         f.write(linha + "\n")
+    for ouvinte in OUVINTES_LOG:
+        ouvinte(linha)
 
 
 def eh_admin() -> bool:
@@ -178,6 +185,9 @@ def formatar(drive: str, fs: str) -> tuple[bool, str]:
         text=True,
         encoding="utf-8",
         errors="replace",
+        # Sem isso, rodando pela interface grafica (pythonw), cada format
+        # pisca uma janela de console na tela.
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     if resultado.returncode != 0:
         return False, (resultado.stderr or resultado.stdout or "").strip()
