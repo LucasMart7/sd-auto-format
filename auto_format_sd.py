@@ -1,15 +1,14 @@
 """
 auto_format_sd.py
 
-Fica rodando no terminal observando quando um cartao SD e conectado ao PC
-(Windows). Quando detecta um cartao removivel novo, formata automaticamente,
-copia um arquivo de configuracao fixo para dentro dele, confere a gravacao
-e ejeta o cartao.
+Fica rodando no terminal do VSCode observando quando um cartao SD
+e conectado ao PC (Windows). Quando detecta um cartao removivel novo,
+formata automaticamente e copia um arquivo .txt fixo para dentro dele.
 
-Requisitos (instalar uma vez):
-    pip install -r requirements.txt
+Requisitos (instalar uma vez no terminal do VSCode):
+    pip install pywin32
 
-IMPORTANTE: rode o terminal COMO ADMINISTRADOR, senao o format falha.
+IMPORTANTE: rode o VSCode/terminal COMO ADMINISTRADOR, senao o format falha.
 """
 
 import ctypes
@@ -27,14 +26,37 @@ import winioctlcon
 
 # ================== CONFIGURACOES (ajuste aqui) ==================
 
-# Caminho do arquivo que sera copiado sempre que um cartao for detectado.
-# O NOME IMPORTA: muitos dispositivos (ex.: cameras veiculares) so leem a
-# configuracao de um arquivo com nome exato na raiz do cartao. shutil.copy
-# preserva o nome de origem, entao nomeie o arquivo como o dispositivo espera.
-ARQUIVO_A_COPIAR = r"C:\SDConfig\writeconfig.txt"
+# Modelos de camera suportados: nome -> arquivo de configuracao no PC.
+# O script le esse arquivo e grava uma copia na raiz do cartao como
+# writeconfig.txt. O operador escolhe o modelo (botao na interface ou
+# --modelo no terminal). Para um modelo novo, basta uma linha.
+# O arquivo de origem NAO pode ter BOM: a camera descarta o primeiro comando.
+# NAO aponte para pasta do OneDrive: o monitor roda como administrador e o
+# OneDrive nao entrega arquivos a processos elevados - o arquivo "some".
+# (A config da JC450 e copia de ...\OneDrive\...\JC450\mesFactory\writeconfig.txt
+# e a da JC400D de ...\OneDrive\...\JC400D\writeconfig.txt;
+# se editar la, copie de novo para ca.)
+MODELOS = {
+    "JC400AD": r"C:\JimiSD\writeconfig.txt",
+    "JC400D": r"C:\JimiSD\JC400D\writeconfig.txt",
+    "JC450": r"C:\JimiSD\JC450\writeconfig.txt",
+}
+
+# Modelo aplicado aos cartoes. A interface troca esta global pelo seletor.
+MODELO_ATIVO = "JC400AD"
+
+# Nome com que o arquivo e gravado na raiz do cartao, seja qual for a origem.
+# O NOME IMPORTA: a camera so le a configuracao de um arquivo chamado
+# exatamente "writeconfig.txt" na raiz do cartao.
+NOME_NO_CARTAO = "writeconfig.txt"
+
+
+def arquivo_do_modelo(modelo: str | None = None) -> str:
+    """Caminho do .txt de origem do modelo (padrao: o modelo ativo)."""
+    return MODELOS[modelo or MODELO_ATIVO]
 
 # Rotulo (nome) que o cartao vai receber depois de formatado (max. 11 chars p/ FAT32)
-ROTULO_VOLUME = "SDCONFIG"
+ROTULO_VOLUME = "JIMI"
 
 # Faixa de tamanho aceita, em GB. Protege contra formatar por engano
 # um pendrive ou HD externo. Ajustado para cartao de 128 GB, que o Windows
@@ -43,12 +65,12 @@ TAMANHO_MIN_GB = 100
 TAMANHO_MAX_GB = 140
 
 # Sistema de arquivos. None = automatico (FAT32 ate 32 GB, exFAT acima).
-# O Windows NAO consegue criar FAT32 em volume maior que 32 GB; se o
-# dispositivo exigir FAT32 num cartao de 128 GB, e preciso Rufus ou guiformat.
+# O Windows NAO consegue criar FAT32 em volume maior que 32 GB; se a camera
+# exigir FAT32 num cartao de 128 GB, e preciso Rufus ou guiformat (ver README).
 FS_FORCADO = None
 
 # Arquivo de log
-LOG_PATH = r"C:\SDConfig\log.txt"
+LOG_PATH = r"C:\JimiSD\log.txt"
 
 # Intervalo entre verificacoes, em segundos
 INTERVALO_SEGUNDOS = 2
@@ -303,6 +325,11 @@ def ejetar(drive: str, tentativas: int = 5) -> tuple[bool, str]:
 
 
 def formatar_e_copiar(drive: str) -> None:
+    # Fixa o modelo no inicio: se o operador trocar o seletor no meio, este
+    # cartao continua recebendo o arquivo com que comecou.
+    modelo = MODELO_ATIVO
+    origem = arquivo_do_modelo(modelo)
+
     if not esperar_volume_pronto(drive):
         log(f"{drive} ignorado: volume nao ficou pronto a tempo.")
         return
@@ -318,8 +345,8 @@ def formatar_e_copiar(drive: str) -> None:
             f"({TAMANHO_MIN_GB}-{TAMANHO_MAX_GB} GB).")
         return
 
-    if not os.path.isfile(ARQUIVO_A_COPIAR):
-        log(f"ERRO: arquivo a copiar nao encontrado em {ARQUIVO_A_COPIAR}. "
+    if not os.path.isfile(origem):
+        log(f"ERRO: arquivo do modelo {modelo} nao encontrado em {origem}. "
             f"{drive} NAO sera formatado.")
         return
 
@@ -330,7 +357,8 @@ def formatar_e_copiar(drive: str) -> None:
             f"FS_FORCADO = None para cair em exFAT.")
         return
 
-    log(f"Cartao detectado em {drive} ({tam_gb:.1f} GB). Formatando em {fs}...")
+    log(f"Cartao detectado em {drive} ({tam_gb:.1f} GB), modelo {modelo}. "
+        f"Formatando em {fs}...")
 
     ok, erro = formatar(drive, fs)
     if not ok:
@@ -341,9 +369,9 @@ def formatar_e_copiar(drive: str) -> None:
         log(f"ERRO: {drive} nao voltou a ficar acessivel depois do format.")
         return
 
-    destino = os.path.join(drive + "\\", os.path.basename(ARQUIVO_A_COPIAR))
+    destino = os.path.join(drive + "\\", NOME_NO_CARTAO)
     try:
-        shutil.copy(ARQUIVO_A_COPIAR, destino)
+        shutil.copyfile(origem, destino)
     except Exception as e:
         log(f"ERRO ao copiar arquivo para {drive}: {e}")
         return
@@ -351,7 +379,7 @@ def formatar_e_copiar(drive: str) -> None:
     # Conferir ANTES de ejetar: depois da ejecao nao ha mais como verificar.
     # Cartao SD confirma escrita que ficou so no cache e nunca chegou ao flash.
     try:
-        with open(ARQUIVO_A_COPIAR, "rb") as f:
+        with open(origem, "rb") as f:
             origem_bytes = f.read()
         with open(destino, "rb") as f:
             destino_bytes = f.read()
@@ -366,7 +394,7 @@ def formatar_e_copiar(drive: str) -> None:
         return
 
     log(f"Concluido: {drive} formatado ({fs}), "
-        f"{os.path.basename(destino)} gravado e conferido "
+        f"{NOME_NO_CARTAO} do modelo {modelo} gravado e conferido "
         f"({len(origem_bytes)} bytes).")
 
     if ABRIR_EXPLORER:
@@ -389,6 +417,14 @@ def formatar_e_copiar(drive: str) -> None:
 
 
 def main() -> None:
+    global MODELO_ATIVO
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Formata cartoes SD e grava a config da camera.")
+    parser.add_argument("--modelo", choices=sorted(MODELOS), default=MODELO_ATIVO,
+                        help=f"modelo de camera (padrao: {MODELO_ATIVO})")
+    MODELO_ATIVO = parser.parse_args().modelo
+
     if not eh_admin():
         log("ERRO: execute este script em um terminal COMO ADMINISTRADOR. "
             "Sem elevacao o format sempre falha com acesso negado.")
@@ -397,7 +433,8 @@ def main() -> None:
     desativar_quickedit()
     suprimir_dialogos_de_erro()
 
-    log("=== Monitor de cartao SD iniciado. Aguardando insercao... ===")
+    log(f"=== Monitor de cartao SD iniciado (modelo {MODELO_ATIVO}, "
+        f"{arquivo_do_modelo()}). Aguardando insercao... ===")
     log("(Deixe este terminal aberto. Pressione Ctrl+C para parar.)")
 
     # Cartoes ja inseridos ao iniciar NAO sao formatados.
