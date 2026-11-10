@@ -57,7 +57,7 @@ class MonitorSD:
 
         afs.OUVINTES_LOG.append(lambda linha: self.fila.put(("log", linha)))
 
-        root.title("Monitor SD")
+        root.title("Monitor SD - Cameras Jimi")
         root.geometry("760x520")
         root.minsize(560, 380)
         root.protocol("WM_DELETE_WINDOW", self.fechar)
@@ -82,22 +82,23 @@ class MonitorSD:
         self.lbl_contador.pack(side="right")
         self._atualizar_contador()
 
+        seletor = ttk.LabelFrame(self.root, text="Modelo da camera", padding=(10, 4))
+        seletor.pack(fill="x", padx=12, pady=(0, 6))
+        self.var_modelo = tk.StringVar(value=afs.MODELO_ATIVO)
+        self.botoes_modelo = []
+        for modelo in afs.MODELOS:
+            rb = ttk.Radiobutton(
+                seletor, text=modelo, value=modelo, variable=self.var_modelo,
+                command=self._aplicar_modelo,
+            )
+            rb.pack(side="left", padx=(0, 18))
+            self.botoes_modelo.append(rb)
+
         info = ttk.Frame(self.root, padding=(12, 0, 12, 6))
         info.pack(fill="x")
-        linha_modelo = ttk.Frame(info)
-        linha_modelo.pack(anchor="w", pady=(0, 4))
-        ttk.Label(linha_modelo, text="Modelo da camera:").pack(side="left")
-        self.var_modelo = tk.StringVar(value=afs.MODELO_ATIVO)
-        seletor = ttk.Combobox(
-            linha_modelo, textvariable=self.var_modelo, values=sorted(afs.MODELOS),
-            state="readonly", width=12,
-        )
-        seletor.pack(side="left", padx=(6, 0))
-        seletor.bind("<<ComboboxSelected>>", lambda _evento: self._trocar_modelo())
-
         self.lbl_arquivo = ttk.Label(info)
         self.lbl_arquivo.pack(anchor="w")
-        self._mostrar_arquivo_do_modelo()
+        self._aplicar_modelo()
         ttk.Label(
             info,
             text=f"Cartoes aceitos: {afs.TAMANHO_MIN_GB}-{afs.TAMANHO_MAX_GB} GB   |   "
@@ -151,21 +152,22 @@ class MonitorSD:
         self.txt.see("end")
         self.txt.config(state="disabled")
 
-    def _mostrar_arquivo_do_modelo(self) -> None:
-        origem = afs.arquivo_do_modelo()
-        existe = os.path.isfile(origem)
+    def _aplicar_modelo(self) -> None:
+        # formatar_e_copiar le MODELO_ATIVO no inicio de cada cartao.
+        afs.MODELO_ATIVO = self.var_modelo.get()
+        caminho = afs.arquivo_do_modelo()
+        existe = os.path.isfile(caminho)
         self.lbl_arquivo.config(
-            text=f"Arquivo copiado: {origem}"
+            text=f"Arquivo copiado ({afs.MODELO_ATIVO}): {caminho}"
             + ("" if existe else "   (NAO ENCONTRADO - nenhum cartao sera formatado)"),
             foreground="" if existe else "#b00020",
         )
 
-    def _trocar_modelo(self) -> None:
-        # formatar_e_copiar fixa o modelo no inicio de cada cartao, entao a troca
-        # vale a partir do proximo cartao inserido.
-        afs.MODELO_ATIVO = self.var_modelo.get()
-        afs.log(f"Modelo selecionado: {afs.MODELO_ATIVO} ({afs.arquivo_do_modelo()}).")
-        self._mostrar_arquivo_do_modelo()
+    def _travar_modelo(self, travar: bool) -> None:
+        # Trocar de modelo com o monitor rodando e facil de passar despercebido;
+        # exige parar o monitor antes, para a troca ser um ato deliberado.
+        for rb in self.botoes_modelo:
+            rb.config(state="disabled" if travar else "normal")
 
     def _aplicar_opcoes(self) -> None:
         # formatar_e_copiar le essas globais a cada cartao, entao vale na hora.
@@ -180,10 +182,12 @@ class MonitorSD:
             self.btn_iniciar.config(state="disabled", text="Parando...")
             return
         self.parar.clear()
+        self._aplicar_modelo()
+        self._travar_modelo(True)
         self.thread = threading.Thread(target=self._monitorar, daemon=True)
         self.thread.start()
         self.btn_iniciar.config(text="Parar monitor")
-        self._mostrar_status("Aguardando cartao...", COR_AGUARDANDO)
+        self._mostrar_status(f"Aguardando cartao ({afs.MODELO_ATIVO})...", COR_AGUARDANDO)
 
     def abrir_log(self) -> None:
         if os.path.isfile(afs.LOG_PATH):
@@ -213,8 +217,8 @@ class MonitorSD:
         """Mesmo loop do main() do auto_format_sd, interrompivel pelo botao Parar."""
         pythoncom.CoInitialize()  # win32com (Explorer/ejecao) exige isso por thread
         try:
-            afs.log(f"=== Monitor de cartao SD iniciado (modelo {afs.MODELO_ATIVO}). "
-                    "Aguardando insercao... ===")
+            afs.log(f"=== Monitor de cartao SD iniciado (modelo {afs.MODELO_ATIVO}, "
+                    f"{afs.arquivo_do_modelo()}). Aguardando insercao... ===")
             conhecidos = afs.listar_cartoes_prontos()
             if conhecidos:
                 afs.log(f"Ignorando cartoes ja presentes: {', '.join(sorted(conhecidos))}. "
@@ -250,9 +254,11 @@ class MonitorSD:
                 elif tipo == "aguardando":
                     self.processando = False
                     if not self.parar.is_set():
-                        self._mostrar_status("Aguardando cartao...", COR_AGUARDANDO)
+                        self._mostrar_status(f"Aguardando cartao ({afs.MODELO_ATIVO})...",
+                                             COR_AGUARDANDO)
                 elif tipo == "parado":
                     self.processando = False
+                    self._travar_modelo(False)
                     self._mostrar_status("Parado", COR_PARADO)
                     self.btn_iniciar.config(state="normal", text="Iniciar monitor")
         except queue.Empty:

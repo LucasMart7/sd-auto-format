@@ -13,7 +13,7 @@ Cada etapa vai para um log com data e hora.
 
 ## Modelos de câmera
 
-O script suporta três modelos: **JC400AD**, **JC400D** e **JC450**. Cada um tem o seu arquivo de configuração no PC, e o operador escolhe o modelo na interface ou com `--modelo` no terminal. O modelo fica fixo durante a gravação de cada cartão: se a seleção mudar no meio, o cartão em andamento termina com a configuração com que começou.
+O script suporta três modelos: **JC400AD**, **JC400D** e **JC450**. Cada um tem o seu arquivo de configuração no PC, e o operador escolhe o modelo na interface ou com `--modelo` no terminal. O modelo fica fixo durante a gravação de cada cartão. Na interface, a escolha do modelo fica travada enquanto o monitor roda: para trocar, é preciso parar o monitor, assim a troca nunca passa despercebida.
 
 Para cadastrar um modelo novo, basta uma linha no dicionário `MODELOS`:
 
@@ -46,8 +46,8 @@ No recondicionamento de dispositivos, cada cartão precisava ser formatado, rece
 
 O `sd_gui.py` roda a mesma automação numa janela, sem precisar de terminal:
 
-- Seletor do **modelo da câmera**, que mostra qual arquivo será gravado e avisa se ele não existir.
-- Botão **Iniciar/Parar monitor** e indicador de status: cinza (parado), verde (aguardando cartão) e laranja (processando, não remova).
+- Seletor do **modelo da câmera**, que mostra qual arquivo será gravado, avisa se ele não existir e fica travado enquanto o monitor roda.
+- Botão **Iniciar/Parar monitor** e indicador de status: cinza (parado), verde (aguardando cartão, com o modelo ativo) e laranja (processando, não remova).
 - Log ao vivo com cores: erro em vermelho, aviso em laranja e sucesso em verde.
 - Contador de cartões gravados na sessão.
 - Opções de ejetar ao terminar e de abrir o Explorer para conferir, que valem na hora.
